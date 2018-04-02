@@ -1,4 +1,4 @@
-# Install Sidekiq on Rails
+# Setup Sidekiq and Redis on Rails and use in Heroku Production
 
 Hey Everyone, 
 I thought I would share this information with everyone to help anyone looking to setup and background job process on their rails development machine (which also works in Heroku production).
@@ -61,15 +61,15 @@ Create 2 new files in your rails ./ home directory
 
 Add this code to `Procfile`
 ```yaml
-web: bundle exec puma -C config/puma.rb
+web:    bundle exec puma -C config/puma.rb
 worker: bundle exec sidekiq -e production -C config/sidekiq.yml
 ```
 
 Add this code to `Procfile.dev`
 ```yaml
-redis:     redis-ser
-worker:    bundle exec sidekiq
-rails:     PORT=3000 bundle exec rails server
+redis:  redis-ser
+worker: bundle exec sidekiq
+rails:  PORT=3000 bundle exec rails server
 ```
 
 Create a file `config/sidekiq.yml`
@@ -88,13 +88,13 @@ production:
 Create a file `config/initializers/sidekiq.rb`
 ```ruby
 if Rails.env.production?
-	Sidekiq.configure_client do |config|
-		config.redis = { url: ENV['REDIS_URL'], :size => 1, network_timeout: 5 }
-	end
+  Sidekiq.configure_client do |config|
+    config.redis = { url: ENV['REDIS_URL'], :size => 1, network_timeout: 5 }
+  end
 
-	Sidekiq.configure_server do |config|
-		config.redis = { url: ENV['REDIS_URL'], :size => 7, network_timeout: 5 }
-	end
+  Sidekiq.configure_server do |config|
+    config.redis = { url: ENV['REDIS_URL'], :size => 7, network_timeout: 5 }
+  end
 end
 ```
 
@@ -111,20 +111,20 @@ port        ENV['PORT']     || 3000
 environment ENV['RACK_ENV'] || 'development'
 
 on_worker_boot do
-	ActiveRecord::Base.establish_connection
+  ActiveRecord::Base.establish_connection
 end
 
 # if you use puma worker killer use this also
 before_fork do
-	require 'puma_worker_killer'
+  require 'puma_worker_killer'
 
-  	PumaWorkerKiller.config do |config|
-		config.ram                        = (ENV["PUMA_WORKER_KILLER_RAM"] || 512).to_i # mb, change as needed according to your dyno available mem
-		config.frequency                  = (ENV["PUMA_WORKER_KILLER_FREQUENCY"] || 30).to_i # seconds, change as needed
-		config.percent_usage              = (ENV["PUMA_WORKER_KILLER_PERCENT_USAGE"] || 0.96).to_f # change percentage as needed
-		config.rolling_restart_frequency  = (ENV["PUMA_WORKER_KILLER_ROLLING_RESTART_FREQUENCY"] || 12).to_i * 3600 # 12 hours in seconds
-  	end
- 	PumaWorkerKiller.start
+  PumaWorkerKiller.config do |config|
+    config.ram                        = (ENV["PUMA_WORKER_KILLER_RAM"] || 512).to_i # mb, change as needed according to your dyno available mem
+    config.frequency                  = (ENV["PUMA_WORKER_KILLER_FREQUENCY"] || 30).to_i # seconds, change as needed
+    config.percent_usage              = (ENV["PUMA_WORKER_KILLER_PERCENT_USAGE"] || 0.96).to_f # change percentage as needed
+    config.rolling_restart_frequency  = (ENV["PUMA_WORKER_KILLER_ROLLING_RESTART_FREQUENCY"] || 12).to_i * 3600 # 12 hours in seconds
+  end
+  PumaWorkerKiller.start
 end
 
 # Allow puma to be restarted by rails restart command.
@@ -138,10 +138,10 @@ require 'rails/all'
 Bundler.require(*Rails.groups)
 
 module Blog
-	class Application < Rails::Application
-		# ONLY the follow line is to be added
-		config.active_job.queue_adapter = :sidekiq
-	end
+  class Application < Rails::Application
+    # ONLY the follow line is to be added
+    config.active_job.queue_adapter = :sidekiq
+  end
 end
 ```
 
@@ -149,7 +149,7 @@ Now create a new route in `config/routes.rb`
 ```ruby
 require 'sidekiq/web'
 authenticate :user, lambda { |u| u.super_admin? } do
-	mount Sidekiq::Web => '/sidekiq'
+  mount Sidekiq::Web => '/sidekiq'
 end
 get '/sidekiq' => redirect('/')
 ```
@@ -158,7 +158,7 @@ If you do not have a super_admin or admin you can use this route instead:_
 ```ruby
 require 'sidekiq/web'
 authenticate :user do
-	mount Sidekiq::Web => '/sidekiq'
+  mount Sidekiq::Web => '/sidekiq'
 end
 get '/sidekiq' => redirect('/')
 ```
@@ -174,12 +174,11 @@ From here you can start creating workers to run in the background
 
 If your using this is production you need to set some environment variables as follows:
 
-	RACK_ENV : ‘production'
-	REDIS_PROVIDER : # Production redis server URL to be pasted here
-	REDIS_URL : # Production redis server URL to be pasted here
+	RACK_ENV: production
+	REDIS_PROVIDER: # Production redis server URL to be pasted here
+	REDIS_URL: # Production redis server URL to be pasted here
 
 Stop any rails servers you have currently running and install of running `rails s` to start rails, install run this command
-
 ```bash
 foreman start -f Procfile.dev
 ```
@@ -192,43 +191,47 @@ This will start redis, sidekiq and rails from 1 terminal window. You can pressin
 
 Create a worker
 
-`rails g sidekiq:worker RunDailyReports`
+```bash
+rails g sidekiq:worker RunDailyReports
+```
 
 This will create a new file called `app/workers/run_daily_report_worker.rb`
 ```ruby
 class RunDailyReportWorker
-	include Sidekiq::Worker
+  include Sidekiq::Worker
 
-	def perform(name, count)
-		# do something
-	end
+  def perform(name, count)
+    # do something
+  end
 end
 ```
 
 Ok so that’s how to create a sidekiq job, how about ActiveJob, lets create a new job also, so you have any option you want
 
-`rails generate job RunDailyReport`
+```bash
+rails generate job RunDailyReport
+```
 
 This will create a new file called `app/jobs/run_daily_report_job.rb`
 ```ruby
 class RunDailyReportJob < ApplicationJob
-	queue_as :default
-	
-	def perform(*guests)
-		# Do something later
-	end
+  queue_as :default
+
+  def perform(*guests)
+    # Do something later
+  end
 end
 ```
 
 Both look nearly the same, however to have sidekiq work in activejob, you need to add the following line
 ```ruby
 class RunDailyReportJob < ApplicationJob
-	include Sidekiq::Worker # New
-	queue_as :default
-	
-	def perform(*guests)
-		# Do something later
-	end
+include Sidekiq::Worker # New
+  queue_as :default
+
+  def perform(*guests)
+    # Do something later
+  end
 end
 ```
 
