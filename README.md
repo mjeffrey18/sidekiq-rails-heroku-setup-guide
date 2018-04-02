@@ -227,7 +227,7 @@ This will create a new file called `app/jobs/run_daily_report_job.rb`
 class RunDailyReportJob < ApplicationJob
   queue_as :default
 
-  def perform(*guests)
+  def perform(*args)
     # Do something later
   end
 end
@@ -239,7 +239,7 @@ class RunDailyReportJob < ApplicationJob
 include Sidekiq::Worker # New
   queue_as :default
 
-  def perform(*guests)
+  def perform(*args)
     # Do something later
   end
 end
