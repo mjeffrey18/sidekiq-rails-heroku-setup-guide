@@ -14,7 +14,9 @@ Sidekiq using Redis, which in-memory datastore, this has a dedicated server to h
 
 ### Installation
 
-To setup sidekiq you must first have a running rails application, a database server (I personally use PostgreSQL) and a Redis server. Technically the PG DB is not actually required to run Sidekiq, however, you cannot operate rails without one and most production environments will run all 4 mechanisms on separate instances i.e. Rails as a process, PG as a server, Redis as a server and Sidekiq as a worker process.
+To setup sidekiq you must first have a running rails application, a database server (I personally use PostgreSQL) and a Redis server. Technically the PG DB is not actually required to run Sidekiq, however, you cannot operate rails without one and most production environments will run all 4 mechanisms on separate instances i.e. Rails running on puma server as a process, PG as a database service, Redis as a data store service and Sidekiq as a worker process.
+Basically in Heroku your should use at least 2 dyno's, 1 for rails and 1 for sidekiq.
+Redis and postgresql run as addon services.
 During this tutorial I’m going to skip setting up Rails and PostgreSQL, as I will assume that is already setup. 
 
 #### Redis Setup
@@ -28,8 +30,8 @@ brew install redis
 This will run through the installation process and install 
 
 ##### Production Redis
-In Heroku production I suggest you use heroku-redis, its free, good for 30MB and 30 connections, I’ve not had any issues in over a years since using it.
-Be sure to use the a separate redis production Add-on, if your using redis already for caching. Caching and background jobs don’t work well on the same instance.
+In Heroku production I suggest you use heroku-redis, its free, good for 30MB and 30 connections, I’ve not had any issues in over for over a year since using it.
+Be sure to use the a separate redis production Add-on, if your using redis already as a cache store. Caching and background jobs don’t work well on the same instance.
 
 #### Process Manager Setup
 Install Foreman (or) Hivemind
@@ -47,6 +49,7 @@ brew install hivemind
 In Rails Gemfile
 ```ruby
 gem 'sidekiq'
+gem 'puma' # if not already there
 ```
 
 Run bundler
@@ -114,7 +117,12 @@ on_worker_boot do
   ActiveRecord::Base.establish_connection
 end
 
-# if you use puma worker killer use this also
+# Allow puma to be restarted by rails restart command.
+plugin :tmp_restart
+```
+
+> Note - (if) your use puma worker killer add this to `config/application.rb' also
+```ruby
 before_fork do
   require 'puma_worker_killer'
 
@@ -126,9 +134,11 @@ before_fork do
   end
   PumaWorkerKiller.start
 end
+```
 
-# Allow puma to be restarted by rails restart command.
-plugin :tmp_restart
+Be sure to have `puma worker killer` in your gemfile...
+```ruby
+gem "puma_worker_killer"
 ```
 
 Edit this file `config/application.rb` with a single line
